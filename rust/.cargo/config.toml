@@ -1,0 +1,6 @@
+[build]
+target = "thumbv8m.main-none-eabihf"
+
+[toolchain]
+channel = "stable"
+targets = ["thumbv8m.main-none-eabihf"]
