@@ -3,5 +3,5 @@
 version = 4
 
 [[package]]
-name = "ntrix-gpu-core"
+name = "ntrix-vdc-core"
 version = "0.1.0"

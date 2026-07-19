@@ -1,5 +1,5 @@
-# NtrixGPU
-A custom GPU designed for the [NtrixOS](https://github.com/NtrixOS) project.
+# NtrixVDC
+A custom VDC designed for the [NtrixOS](https://github.com/NtrixOS) project.
 
 > [!CAUTION]
 > Just a hobby project, not production ready. You have been warned.
@@ -7,7 +7,7 @@ A custom GPU designed for the [NtrixOS](https://github.com/NtrixOS) project.
 ## Goals
 - Provide a interface abstraction for DVI
 - Draw pixels
-- Draw/Render characters/glyphs on GPU
+- Draw/Render characters/glyphs
 
 ## Hardware Requirements
 - RP235x microcontroller
