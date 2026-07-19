@@ -1,3 +1,4 @@
+//! Character Cell API.
 #[cfg(not(feature = "defmt"))]
 use bitflags::bitflags;
 #[cfg(feature = "defmt")]
