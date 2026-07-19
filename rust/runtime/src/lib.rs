@@ -1,7 +1,7 @@
 #![no_std]
 
 use embassy_sync::blocking_mutex::CriticalSectionMutex as Mutex;
-use ntrix_vdc_sdk::prelude::CharCell;
+use ntrix_vdc_sdk::prelude::*;
 
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
@@ -31,6 +31,33 @@ pub struct AppCtx {
     pub write_bus_blocking: extern "C" fn(src: *const u8, len: usize) -> isize,
 }
 
+pub(crate) struct HardwareHandler {
+    ctx: AppCtx,
+}
+
+impl HardwareHandler {
+    pub(crate) fn new(ctx: AppCtx) -> Self {
+        Self { ctx }
+    }
+    pub(crate) fn read_bus_blocking(&self, dst: &mut [u8]) -> Result<(), isize> {
+        let bytes_read = (self.ctx.read_bus_blocking)(dst.as_mut_ptr(), dst.len());
+        if bytes_read >= 0 && bytes_read as usize == dst.len() {
+            Ok(())
+        } else {
+            Err(bytes_read)
+        }
+    }
+
+    pub(crate) fn write_bus_blocking(&self, src: &[u8]) -> Result<(), isize> {
+        let bytes_written = (self.ctx.write_bus_blocking)(src.as_ptr(), src.len());
+        if bytes_written >= 0 && bytes_written as usize == src.len() {
+            Ok(())
+        } else {
+            Err(bytes_written)
+        }
+    }
+}
+
 /// Acquire access to the raw frame buffer.
 ///
 /// # Safety
@@ -48,7 +75,19 @@ pub extern "C" fn aquire_framebuffer(op: extern "C" fn(RawFrameBuffer)) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn run(app_ctx: &AppCtx) {
-    // TODO
-    todo!()
+pub extern "C" fn run(ctx: AppCtx) {
+    let hw = HardwareHandler::new(ctx);
+    loop {
+        let mut raw_control_packet = [0u8; 2];
+        hw.read_bus_blocking(&mut raw_control_packet).unwrap();
+        let control_packet = ControlPacket::unpack(raw_control_packet).unwrap();
+        match control_packet {
+            ControlPacket::GetMode => {
+                let mode = DisplayMode::new(DisplayModeResolution::default(), false);
+                let out = ControlPacket::SetMode(mode).pack();
+                hw.write_bus_blocking(&out).unwrap();
+            }
+            _ => todo!(),
+        }
+    }
 }

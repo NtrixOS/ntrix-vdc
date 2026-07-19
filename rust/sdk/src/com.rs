@@ -39,6 +39,15 @@ pub struct DisplayMode {
     chars_enabled: bool,
 }
 
+impl DisplayMode {
+    pub fn new(resolution: DisplayModeResolution, chars_enabled: bool) -> Self {
+        Self {
+            resolution,
+            chars_enabled,
+        }
+    }
+}
+
 impl PackablePayload for DisplayMode {
     fn pack(self) -> u16 {
         let res_bits = self.resolution as u16;
