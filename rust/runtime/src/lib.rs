@@ -1,7 +1,11 @@
 #![no_std]
 
+mod font;
+
 use embassy_sync::blocking_mutex::CriticalSectionMutex as Mutex;
 use ntrix_vdc_sdk::prelude::*;
+
+use crate::font::{FONT_HEIGHT, FONT_WIDTH};
 
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
@@ -11,12 +15,12 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
 const SCREEN_WIDTH: usize = 640;
 const SCREEN_HEIGHT: usize = 480;
 const PIXEL_ROW_SIZE: usize = SCREEN_WIDTH / 8;
-const FONT_SIZE: usize = 8;
+const CHAR_ROW_SIZE: usize = SCREEN_WIDTH / FONT_WIDTH;
 
 static PIXEL_BUFFER: Mutex<[u8; PIXEL_ROW_SIZE * SCREEN_HEIGHT]> =
     Mutex::new([0; PIXEL_ROW_SIZE * SCREEN_HEIGHT]);
-static mut CHAR_BUFFER: [CharCell; (SCREEN_WIDTH / FONT_SIZE) * (SCREEN_HEIGHT / FONT_SIZE)] =
-    [CharCell::from_u8_lossy(0); (SCREEN_WIDTH / FONT_SIZE) * (SCREEN_HEIGHT / FONT_SIZE)];
+static mut CHAR_BUFFER: [CharCell; (SCREEN_WIDTH / FONT_WIDTH) * (SCREEN_HEIGHT / FONT_HEIGHT)] =
+    [CharCell::from_u8_lossy(0); (SCREEN_WIDTH / FONT_WIDTH) * (SCREEN_HEIGHT / FONT_HEIGHT)];
 
 #[repr(C)]
 pub struct RawFrameBuffer {
