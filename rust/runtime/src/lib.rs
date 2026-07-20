@@ -27,17 +27,17 @@ pub struct RawFrameBuffer {
 }
 
 #[repr(C)]
-pub struct AppCtx {
+pub struct HardwareCtx {
     pub read_bus_blocking: extern "C" fn(dst: *mut u8, len: usize) -> isize,
     pub write_bus_blocking: extern "C" fn(src: *const u8, len: usize) -> isize,
 }
 
 pub(crate) struct HardwareHandler {
-    ctx: AppCtx,
+    ctx: HardwareCtx,
 }
 
 impl HardwareHandler {
-    pub(crate) fn new(ctx: AppCtx) -> Self {
+    pub(crate) fn new(ctx: HardwareCtx) -> Self {
         Self { ctx }
     }
     pub(crate) fn read_bus_blocking(&self, dst: &mut [u8]) -> Result<(), isize> {
@@ -76,7 +76,7 @@ pub extern "C" fn aquire_framebuffer(op: extern "C" fn(RawFrameBuffer)) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn run(ctx: AppCtx) {
+pub extern "C" fn run(ctx: HardwareCtx) {
     let hw = HardwareHandler::new(ctx);
     loop {
         let mut raw_control_packet = [0u8; 2];
