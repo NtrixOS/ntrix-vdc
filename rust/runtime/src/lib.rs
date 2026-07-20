@@ -10,10 +10,11 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
 
 const SCREEN_WIDTH: usize = 640;
 const SCREEN_HEIGHT: usize = 480;
+const PIXEL_ROW_SIZE: usize = SCREEN_WIDTH / 8;
 const FONT_SIZE: usize = 8;
 
-static PIXEL_BUFFER: Mutex<[u8; SCREEN_WIDTH * SCREEN_HEIGHT / 8]> =
-    Mutex::new([0; SCREEN_WIDTH * SCREEN_HEIGHT / 8]);
+static PIXEL_BUFFER: Mutex<[u8; PIXEL_ROW_SIZE * SCREEN_HEIGHT]> =
+    Mutex::new([0; PIXEL_ROW_SIZE * SCREEN_HEIGHT]);
 static mut CHAR_BUFFER: [CharCell; (SCREEN_WIDTH / FONT_SIZE) * (SCREEN_HEIGHT / FONT_SIZE)] =
     [CharCell::from_u8_lossy(0); (SCREEN_WIDTH / FONT_SIZE) * (SCREEN_HEIGHT / FONT_SIZE)];
 
@@ -87,6 +88,20 @@ pub extern "C" fn run(ctx: AppCtx) {
                 let out = ControlPacket::SetMode(mode).pack();
                 hw.write_bus_blocking(&out).unwrap();
             }
+            ControlPacket::ReadRowPixels(row_index) => {
+                PIXEL_BUFFER.lock(|fb| {
+                    let row_offset = (row_index as usize) * PIXEL_ROW_SIZE;
+                    let fb = &fb[row_offset..row_offset + PIXEL_ROW_SIZE];
+                    hw.write_bus_blocking(fb).unwrap();
+                });
+            }
+            ControlPacket::WriteRowPixels(row_index) => unsafe {
+                PIXEL_BUFFER.lock_mut(|fb| {
+                    let row_offset = (row_index as usize) * PIXEL_ROW_SIZE;
+                    let fb = &mut fb[row_offset..row_offset + PIXEL_ROW_SIZE];
+                    hw.read_bus_blocking(fb).unwrap();
+                });
+            },
             _ => todo!(),
         }
     }

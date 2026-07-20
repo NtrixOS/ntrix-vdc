@@ -1,16 +1,18 @@
 //! Shared API for the VDC wire protocol.
 use num_enum::TryFromPrimitive;
 
+use crate::helpers::does_u16_fit_u12;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromPrimitive)]
 #[repr(u8)]
 enum ControlCode {
     Reset = 1,
     GetMode = 2,
     SetMode = 3,
-    //ReadRowPixels = 4,
-    //WriteRowPixels = 5,
-    //ReadRowChars = 6,
-    //WriteRowChars = 7,
+    ReadRowPixels = 4,
+    WriteRowPixels = 5,
+    ReadRowChars = 6,
+    WriteRowChars = 7,
     //ReadExt = 8,
     //WriteExt = 9,
 }
@@ -77,6 +79,14 @@ pub enum ControlPacket {
     GetMode,
     /// Set a new display mode
     SetMode(DisplayMode),
+    /// Read a specific row of pixel data
+    ReadRowPixels(u16),
+    /// Write a specific row of pixel data
+    WriteRowPixels(u16),
+    /// Read a specific row of character data
+    ReadRowChars(u16),
+    /// Write a specific row of character data
+    WriteRowChars(u16),
 }
 
 impl From<&ControlPacket> for ControlCode {
@@ -85,6 +95,10 @@ impl From<&ControlPacket> for ControlCode {
             ControlPacket::Reset => Self::Reset,
             ControlPacket::GetMode => Self::GetMode,
             ControlPacket::SetMode(_) => Self::SetMode,
+            ControlPacket::ReadRowPixels(_) => Self::ReadRowPixels,
+            ControlPacket::WriteRowPixels(_) => Self::WriteRowPixels,
+            ControlPacket::ReadRowChars(_) => Self::ReadRowChars,
+            ControlPacket::WriteRowChars(_) => Self::WriteRowChars,
         }
     }
 }
@@ -98,15 +112,19 @@ impl ControlPacket {
             Self::Reset => 0,
             Self::GetMode => 0,
             Self::SetMode(p) => p.pack(),
+            Self::ReadRowPixels(p) => *p,
+            Self::WriteRowPixels(p) => *p,
+            Self::ReadRowChars(p) => *p,
+            Self::WriteRowChars(p) => *p,
         };
-        debug_assert!(payload <= 0x0FFF);
+        debug_assert!(does_u16_fit_u12(payload));
         (((cc as u16) << 12) | payload).to_be_bytes()
     }
 
     /// Unpack raw packet data received over-the-wire into a ControlPacket.
     pub fn unpack(bytes: [u8; 2]) -> Result<Self, ControlPacketError> {
-        let packed = u16::from_be_bytes(bytes); // bottom 12 bits
-        let payload = packed & 0x0FFF;
+        let packed = u16::from_be_bytes(bytes);
+        let payload = packed & 0x0FFF; // bottom 12 bits
 
         let cc = ControlCode::try_from((packed >> 12) as u8)
             .map_err(|_| ControlPacketError::InvalidCode)?; // top 4 bits
@@ -114,6 +132,10 @@ impl ControlPacket {
             ControlCode::Reset => Self::Reset,
             ControlCode::GetMode => Self::GetMode,
             ControlCode::SetMode => Self::SetMode(DisplayMode::unpack(payload)?),
+            ControlCode::ReadRowPixels => Self::ReadRowPixels(payload),
+            ControlCode::WriteRowPixels => Self::WriteRowPixels(payload),
+            ControlCode::ReadRowChars => Self::ReadRowChars(payload),
+            ControlCode::WriteRowChars => Self::WriteRowChars(payload),
         })
     }
 }
