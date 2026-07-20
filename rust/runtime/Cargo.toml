@@ -9,3 +9,6 @@ crate-type = ["staticlib"]
 [dependencies]
 embassy-sync = "0.8.0"
 ntrix-vdc-sdk = { path = "../sdk" }
+
+[build-dependencies]
+cbindgen = "0.29.4"

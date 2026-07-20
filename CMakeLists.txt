@@ -25,6 +25,7 @@ add_custom_target(rust_lib_build ALL DEPENDS ${RUST_LIB_PATH})
 add_library(ntrix_vdc_runtime STATIC IMPORTED GLOBAL)
 set_target_properties(ntrix_vdc_runtime PROPERTIES IMPORTED_LOCATION ${RUST_LIB_PATH})
 add_dependencies(ntrix_vdc_runtime rust_lib_build)
+include_directories(rust/target/include)
 
 add_subdirectory(pico-dvi/software)
 include_directories(pico-dvi/software/include)
