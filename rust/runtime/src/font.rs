@@ -5,8 +5,8 @@ const FONT_DATA: &[u8] = ibm437::IBM437_8X8_REGULAR_DATA;
 pub const FONT_WIDTH: usize = 8;
 pub const FONT_HEIGHT: usize = 8;
 
-pub fn render_char_cell(fb: &mut [u8], fb_cols: usize, col: usize, row: usize, cell: &CharCell) {
-    let fb_stride: usize = (fb_cols * FONT_WIDTH) / 8;
+pub fn render_char_cell(fb: &mut [u8], cb_cols: usize, col: usize, row: usize, cell: &CharCell) {
+    let fb_stride: usize = (cb_cols * FONT_WIDTH) / 8;
     let offset = cell.glyph as usize;
     let glyph_col = offset % ibm437::CHARS_PER_ROW;
     let glyph_row = offset / ibm437::CHARS_PER_ROW;

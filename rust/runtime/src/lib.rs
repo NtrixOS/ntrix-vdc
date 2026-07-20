@@ -2,10 +2,11 @@
 
 mod font;
 
+use bytemuck::{cast_slice, cast_slice_mut};
 use embassy_sync::blocking_mutex::CriticalSectionMutex as Mutex;
 use ntrix_vdc_sdk::prelude::*;
 
-use crate::font::{FONT_HEIGHT, FONT_WIDTH};
+use crate::font::{FONT_HEIGHT, FONT_WIDTH, render_char_cell};
 
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
@@ -88,7 +89,7 @@ pub extern "C" fn run(ctx: HardwareCtx) {
         let control_packet = ControlPacket::unpack(raw_control_packet).unwrap();
         match control_packet {
             ControlPacket::GetMode => {
-                let mode = DisplayMode::new(DisplayModeResolution::default(), false);
+                let mode = DisplayMode::new(DisplayModeResolution::default(), true);
                 let out = ControlPacket::SetMode(mode).pack();
                 hw.write_bus_blocking(&out).unwrap();
             }
@@ -106,6 +107,26 @@ pub extern "C" fn run(ctx: HardwareCtx) {
                     hw.read_bus_blocking(fb).unwrap();
                 });
             },
+            ControlPacket::ReadRowChars(row_index) => {
+                let row_offset = (row_index as usize) * CHAR_ROW_SIZE;
+                let cb = unsafe { &CHAR_BUFFER[row_offset..row_offset + CHAR_ROW_SIZE] };
+                hw.write_bus_blocking(cast_slice(&cb)).unwrap();
+            }
+            ControlPacket::WriteRowChars(row_i) => {
+                let row_i = row_i as usize;
+                let row_offset = (row_i as usize) * CHAR_ROW_SIZE;
+                let cb = unsafe { &mut CHAR_BUFFER[row_offset..row_offset + CHAR_ROW_SIZE] };
+                hw.read_bus_blocking(cast_slice_mut(cb)).unwrap();
+                let cells =
+                    unsafe { &CHAR_BUFFER[row_i + CHAR_ROW_SIZE..(row_i + 1) * CHAR_ROW_SIZE] };
+                unsafe {
+                    PIXEL_BUFFER.lock_mut(|fb| {
+                        for (col_i, cell) in cells.iter().enumerate() {
+                            render_char_cell(fb, CHAR_ROW_SIZE, col_i, row_i, cell);
+                        }
+                    });
+                }
+            }
             _ => todo!(),
         }
     }
