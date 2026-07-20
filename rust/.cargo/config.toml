@@ -1,6 +1,6 @@
 [build]
-target = "thumbv8m.main-none-eabihf"
+target = "thumbv8m.main-none-eabi"
 
 [toolchain]
 channel = "stable"
-targets = ["thumbv8m.main-none-eabihf"]
+targets = ["thumbv8m.main-none-eabi"]
