@@ -31,8 +31,26 @@ where
 pub enum DisplayModeResolution {
     #[default]
     R640x480 = 0,
-    //R320x240 = 2,
-    //R160x120 = 4,
+    R320x240 = 2,
+    R160x120 = 4,
+}
+
+impl DisplayModeResolution {
+    pub const fn width(&self) -> usize {
+        match self {
+            Self::R640x480 => 640,
+            Self::R320x240 => 320,
+            Self::R160x120 => 160,
+        }
+    }
+
+    pub const fn height(&self) -> usize {
+        match self {
+            Self::R640x480 => 480,
+            Self::R320x240 => 240,
+            Self::R160x120 => 120,
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -42,11 +60,19 @@ pub struct DisplayMode {
 }
 
 impl DisplayMode {
-    pub fn new(resolution: DisplayModeResolution, chars_enabled: bool) -> Self {
+    pub const fn new(resolution: DisplayModeResolution, chars_enabled: bool) -> Self {
         Self {
             resolution,
             chars_enabled,
         }
+    }
+
+    pub const fn resolution(&self) -> DisplayModeResolution {
+        self.resolution
+    }
+
+    pub const fn chars_enabled(&self) -> bool {
+        self.chars_enabled
     }
 }
 
