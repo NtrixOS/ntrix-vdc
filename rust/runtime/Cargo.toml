@@ -7,7 +7,6 @@ edition = "2024"
 crate-type = ["staticlib"]
 
 [dependencies]
-embassy-sync = "0.8.0"
 bytemuck = "1.25.2"
 ibm437 = { version = "0.5.0", default-features = false, features = [ "regular8x8" ] }
 ntrix-vdc-sdk = { path = "../sdk" }

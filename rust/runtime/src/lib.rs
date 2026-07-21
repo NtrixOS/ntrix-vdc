@@ -1,9 +1,9 @@
 #![no_std]
-
 mod font;
 
+use core::cell::UnsafeCell;
+
 use bytemuck::{cast_slice, cast_slice_mut};
-use embassy_sync::blocking_mutex::CriticalSectionMutex as Mutex;
 use ntrix_vdc_sdk::prelude::*;
 
 use crate::font::{FONT_HEIGHT, FONT_WIDTH, render_char_cell};
@@ -18,8 +18,13 @@ const SCREEN_HEIGHT: usize = 480;
 const PIXEL_ROW_SIZE: usize = SCREEN_WIDTH / 8;
 const CHAR_ROW_SIZE: usize = SCREEN_WIDTH / FONT_WIDTH;
 
-static PIXEL_BUFFER: Mutex<[u8; PIXEL_ROW_SIZE * SCREEN_HEIGHT]> =
-    Mutex::new([0; PIXEL_ROW_SIZE * SCREEN_HEIGHT]);
+/// # Safety
+/// This is not actually Sync safe.
+struct PixelBufferCell(UnsafeCell<[u8; PIXEL_ROW_SIZE * SCREEN_HEIGHT]>);
+unsafe impl Sync for PixelBufferCell {}
+
+static PIXEL_BUFFER: PixelBufferCell =
+    PixelBufferCell(UnsafeCell::new([0; PIXEL_ROW_SIZE * SCREEN_HEIGHT]));
 static mut CHAR_BUFFER: [CharCell; (SCREEN_WIDTH / FONT_WIDTH) * (SCREEN_HEIGHT / FONT_HEIGHT)] =
     [CharCell::from_u8_lossy(0); (SCREEN_WIDTH / FONT_WIDTH) * (SCREEN_HEIGHT / FONT_HEIGHT)];
 
@@ -70,13 +75,11 @@ impl HardwareHandler {
 /// - Should not be used outside of the call site.
 #[unsafe(no_mangle)]
 pub extern "C" fn aquire_framebuffer(op: extern "C" fn(RawFrameBuffer)) {
-    PIXEL_BUFFER.lock(|fb| {
-        op(RawFrameBuffer {
-            ptr: fb.as_ptr(),
-            width: SCREEN_WIDTH,
-            height: SCREEN_HEIGHT,
-            bits_per_pixel: 1,
-        })
+    op(RawFrameBuffer {
+        ptr: unsafe { (*PIXEL_BUFFER.0.get()).as_ptr() },
+        width: SCREEN_WIDTH,
+        height: SCREEN_HEIGHT,
+        bits_per_pixel: 1,
     })
 }
 
@@ -94,19 +97,20 @@ pub extern "C" fn run(ctx: HardwareCtx) {
                 hw.write_bus_blocking(&out).unwrap();
             }
             ControlPacket::ReadRowPixels(row_index) => {
-                PIXEL_BUFFER.lock(|fb| {
-                    let row_offset = (row_index as usize) * PIXEL_ROW_SIZE;
-                    let fb = &fb[row_offset..row_offset + PIXEL_ROW_SIZE];
-                    hw.write_bus_blocking(fb).unwrap();
-                });
+                let row_offset = (row_index as usize) * PIXEL_ROW_SIZE;
+                let fb = unsafe {
+                    &PIXEL_BUFFER.0.get().as_ref_unchecked()
+                        [row_offset..row_offset + PIXEL_ROW_SIZE]
+                };
+                hw.write_bus_blocking(fb).unwrap();
             }
-            ControlPacket::WriteRowPixels(row_index) => unsafe {
-                PIXEL_BUFFER.lock_mut(|fb| {
-                    let row_offset = (row_index as usize) * PIXEL_ROW_SIZE;
-                    let fb = &mut fb[row_offset..row_offset + PIXEL_ROW_SIZE];
-                    hw.read_bus_blocking(fb).unwrap();
-                });
-            },
+            ControlPacket::WriteRowPixels(row_index) => {
+                let row_offset = (row_index as usize) * PIXEL_ROW_SIZE;
+                let fb = unsafe {
+                    &mut (&mut (*PIXEL_BUFFER.0.get()))[row_offset..row_offset + PIXEL_ROW_SIZE]
+                };
+                hw.read_bus_blocking(fb).unwrap();
+            }
             ControlPacket::ReadRowChars(row_index) => {
                 let row_offset = (row_index as usize) * CHAR_ROW_SIZE;
                 let cb = unsafe { &CHAR_BUFFER[row_offset..row_offset + CHAR_ROW_SIZE] };
@@ -119,12 +123,16 @@ pub extern "C" fn run(ctx: HardwareCtx) {
                 hw.read_bus_blocking(cast_slice_mut(cb)).unwrap();
                 let cells =
                     unsafe { &CHAR_BUFFER[row_i + CHAR_ROW_SIZE..(row_i + 1) * CHAR_ROW_SIZE] };
-                unsafe {
-                    PIXEL_BUFFER.lock_mut(|fb| {
-                        for (col_i, cell) in cells.iter().enumerate() {
-                            render_char_cell(fb, CHAR_ROW_SIZE, col_i, row_i, cell);
-                        }
-                    });
+                for (col_i, cell) in cells.iter().enumerate() {
+                    unsafe {
+                        render_char_cell(
+                            &mut *PIXEL_BUFFER.0.get(),
+                            CHAR_ROW_SIZE,
+                            col_i,
+                            row_i,
+                            cell,
+                        )
+                    };
                 }
             }
             _ => todo!(),
