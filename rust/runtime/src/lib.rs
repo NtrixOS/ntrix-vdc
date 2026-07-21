@@ -29,6 +29,41 @@ static PIXEL_BUFFER: PixelBufferCell =
 static mut CHAR_BUFFER: [CharCell; (SCREEN_WIDTH / FONT_WIDTH) * (SCREEN_HEIGHT / FONT_HEIGHT)] =
     [CharCell::from_u8_lossy(0); (SCREEN_WIDTH / FONT_WIDTH) * (SCREEN_HEIGHT / FONT_HEIGHT)];
 
+struct DisplayModeCell(UnsafeCell<DisplayMode>);
+unsafe impl Sync for DisplayModeCell {}
+static CURRENT_DISPLAY_MODE: DisplayModeCell = DisplayModeCell(UnsafeCell::new(DisplayMode::new(
+    DisplayModeResolution::R640x480,
+    true,
+)));
+
+fn current_pixel_size() -> (usize, usize) {
+    let res = unsafe { CURRENT_DISPLAY_MODE.0.get().as_ref_unchecked().resolution() };
+    (res.width(), res.height())
+}
+
+fn current_pixel_row_size() -> usize {
+    current_pixel_size().0 / 8
+}
+
+fn current_char_size() -> (usize, usize) {
+    let res = unsafe { CURRENT_DISPLAY_MODE.0.get().as_ref_unchecked().resolution() };
+    (res.width() / FONT_WIDTH, res.height() / FONT_HEIGHT)
+}
+
+fn current_char_row_size() -> usize {
+    current_pixel_size().0 / FONT_WIDTH
+}
+
+fn get_current_display_mode() -> DisplayMode {
+    unsafe { *CURRENT_DISPLAY_MODE.0.get() }
+}
+
+fn set_current_display_mode(mode: DisplayMode) {
+    unsafe {
+        *CURRENT_DISPLAY_MODE.0.get().as_mut_unchecked() = mode;
+    }
+}
+
 #[repr(C)]
 pub struct RawFrameBuffer {
     pub ptr: *const u8,
@@ -76,10 +111,13 @@ impl HardwareHandler {
 /// - Should not be used outside of the call site.
 #[unsafe(no_mangle)]
 pub extern "C" fn aquire_framebuffer(op: extern "C" fn(RawFrameBuffer)) {
+    let (width, height) = current_pixel_size();
+    let row_size = current_pixel_row_size();
+    let fb = unsafe { &PIXEL_BUFFER.0.get().as_ref_unchecked()[0..row_size * height] };
     op(RawFrameBuffer {
-        ptr: unsafe { (*PIXEL_BUFFER.0.get()).as_ptr() },
-        width: SCREEN_WIDTH,
-        height: SCREEN_HEIGHT,
+        ptr: (*fb).as_ptr(),
+        width,
+        height,
         bits_per_pixel: 1,
     })
 }
@@ -92,51 +130,60 @@ pub extern "C" fn run(ctx: HardwareCtx) {
         hw.read_bus_blocking(&mut raw_control_packet).unwrap();
         let control_packet = ControlPacket::unpack(raw_control_packet).unwrap();
         match control_packet {
+            ControlPacket::Reset => {
+                unsafe {
+                    CHAR_BUFFER[..].fill(CharCell::from_u8_lossy(0));
+                    (*PIXEL_BUFFER.0.get()).fill(0);
+                };
+                set_current_display_mode(DisplayMode::new(DisplayModeResolution::R640x480, true));
+            }
+            ControlPacket::SetMode(mode) => {
+                unsafe {
+                    CHAR_BUFFER[..].fill(CharCell::from_u8_lossy(0));
+                    (*PIXEL_BUFFER.0.get()).fill(0);
+                };
+                set_current_display_mode(mode);
+            }
             ControlPacket::GetMode => {
-                let mode = DisplayMode::new(DisplayModeResolution::default(), true);
+                let mode = get_current_display_mode();
                 let out = ControlPacket::SetMode(mode).pack();
                 hw.write_bus_blocking(&out).unwrap();
             }
             ControlPacket::ReadRowPixels(row_index) => {
-                let row_offset = (row_index as usize) * PIXEL_ROW_SIZE;
+                let row_size = current_pixel_row_size();
+                let row_offset = (row_index as usize) * row_size;
                 let fb = unsafe {
-                    &PIXEL_BUFFER.0.get().as_ref_unchecked()
-                        [row_offset..row_offset + PIXEL_ROW_SIZE]
+                    &PIXEL_BUFFER.0.get().as_ref_unchecked()[row_offset..row_offset + row_size]
                 };
                 hw.write_bus_blocking(fb).unwrap();
             }
             ControlPacket::WriteRowPixels(row_index) => {
-                let row_offset = (row_index as usize) * PIXEL_ROW_SIZE;
+                let row_size = current_pixel_row_size();
+                let row_offset = (row_index as usize) * row_size;
                 let fb = unsafe {
-                    &mut (&mut (*PIXEL_BUFFER.0.get()))[row_offset..row_offset + PIXEL_ROW_SIZE]
+                    &mut (&mut (*PIXEL_BUFFER.0.get()))[row_offset..row_offset + row_size]
                 };
                 hw.read_bus_blocking(fb).unwrap();
             }
             ControlPacket::ReadRowChars(row_index) => {
-                let row_offset = (row_index as usize) * CHAR_ROW_SIZE;
-                let cb = unsafe { &CHAR_BUFFER[row_offset..row_offset + CHAR_ROW_SIZE] };
+                let row_size = current_char_row_size();
+                let row_offset = (row_index as usize) * row_size;
+                let cb = unsafe { &CHAR_BUFFER[row_offset..row_offset + row_size] };
                 hw.write_bus_blocking(cast_slice(&cb)).unwrap();
             }
             ControlPacket::WriteRowChars(row_i) => {
                 let row_i = row_i as usize;
-                let row_offset = (row_i as usize) * CHAR_ROW_SIZE;
-                let cb = unsafe { &mut CHAR_BUFFER[row_offset..row_offset + CHAR_ROW_SIZE] };
+                let row_size = current_char_row_size();
+                let row_offset = (row_i as usize) * row_size;
+                let cb = unsafe { &mut CHAR_BUFFER[row_offset..row_offset + row_size] };
                 hw.read_bus_blocking(cast_slice_mut(cb)).unwrap();
-                let cells =
-                    unsafe { &CHAR_BUFFER[row_i + CHAR_ROW_SIZE..(row_i + 1) * CHAR_ROW_SIZE] };
+                let cells = unsafe { &CHAR_BUFFER[row_i + CHAR_ROW_SIZE..(row_i + 1) * row_size] };
                 for (col_i, cell) in cells.iter().enumerate() {
                     unsafe {
-                        render_char_cell(
-                            &mut *PIXEL_BUFFER.0.get(),
-                            CHAR_ROW_SIZE,
-                            col_i,
-                            row_i,
-                            cell,
-                        )
+                        render_char_cell(&mut *PIXEL_BUFFER.0.get(), row_size, col_i, row_i, cell)
                     };
                 }
             }
-            _ => todo!(),
         }
     }
 }
