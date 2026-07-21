@@ -8,6 +8,7 @@ use ntrix_vdc_sdk::prelude::*;
 
 use crate::font::{FONT_HEIGHT, FONT_WIDTH, render_char_cell};
 
+#[inline(never)]
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
     loop {}
