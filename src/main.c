@@ -139,9 +139,11 @@ int __not_in_flash("main") main() {
   // Run system at TMDS bit clock
   set_sys_clock_khz(DVI_TIMING.bit_clk_khz, true);
 
+  stdio_init_all();
+
   // init/setup SPI
   uint spi_baudrate = spi_init(SPI_DEVICE, 1000000);
-  printf("running at %d baud\n", spi_baudrate);
+  printf("running at bus %d baud\n", spi_baudrate);
   spi_set_format(SPI_DEVICE, 8, SPI_CPOL_0,
                  SPI_CPHA_1, // NOTE required so CS does not need to be pulsed
                              // every data word transfer
