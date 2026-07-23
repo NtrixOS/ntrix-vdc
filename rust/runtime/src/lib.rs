@@ -105,6 +105,7 @@ pub struct HardwareCtx {
     pub printf: extern "C" fn(*const core::ffi::c_char, ...) -> core::ffi::c_int,
     pub read_bus_blocking: extern "C" fn(dst: *mut u8, len: usize) -> isize,
     pub write_bus_blocking: extern "C" fn(src: *const u8, len: usize) -> isize,
+    pub busy_enable: extern "C" fn(busy: bool),
 }
 
 #[derive(Debug)]
@@ -114,14 +115,18 @@ pub(crate) struct HardwareHandler {
 
 impl HardwareHandler {
     pub(crate) fn new(ctx: HardwareCtx) -> Self {
-        Self { ctx }
+        let hw = Self { ctx };
+        hw.busy_enable(true);
+        hw
     }
     #[allow(unused)]
     pub(crate) unsafe fn printf(&self, msg: &core::ffi::CStr) {
         let _ = (self.ctx.printf)(msg.as_ptr(), ());
     }
     pub(crate) fn read_bus_blocking(&self, dst: &mut [u8]) -> Result<(), isize> {
+        self.busy_enable(false);
         let bytes_read = (self.ctx.read_bus_blocking)(dst.as_mut_ptr(), dst.len());
+        self.busy_enable(true);
         if bytes_read >= 0 && bytes_read as usize == dst.len() {
             Ok(())
         } else {
@@ -136,6 +141,10 @@ impl HardwareHandler {
         } else {
             Err(bytes_written)
         }
+    }
+
+    fn busy_enable(&self, busy: bool) {
+        (self.ctx.busy_enable)(busy)
     }
 }
 

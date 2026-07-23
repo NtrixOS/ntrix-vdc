@@ -16,6 +16,7 @@
 #include "tmds_encode.h"
 #include <hardware/structs/io_bank0.h>
 #include <pico/stdio.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,6 +35,7 @@
 #define SPI_SCK_PIN 2
 #define SPI_TX_PIN 3
 #define SPI_CSN_PIN 5
+#define BUSY_PIN 6
 
 struct dvi_inst dvi0;
 struct semaphore dvi_start_sem;
@@ -119,6 +121,8 @@ static inline intptr_t hw_write_bus_blocking(const uint8_t *src,
   return spi_write_blocking(SPI_DEVICE, src, len);
 }
 
+static inline void hw_busy_enable(bool busy) { gpio_put(BUSY_PIN, busy); }
+
 void __not_in_flash("main") core1_main() {
   build_luts();
 
@@ -141,7 +145,7 @@ int __not_in_flash("main") main() {
 
   stdio_init_all();
 
-  // init/setup SPI
+  // init/setup SPI & GPIO
   uint spi_baudrate = spi_init(SPI_DEVICE, 1000000);
   printf("running at bus %d baud\n", spi_baudrate);
   spi_set_format(SPI_DEVICE, 8, SPI_CPOL_0,
@@ -153,6 +157,9 @@ int __not_in_flash("main") main() {
   gpio_set_function(SPI_SCK_PIN, GPIO_FUNC_SPI);
   gpio_set_function(SPI_TX_PIN, GPIO_FUNC_SPI);
   gpio_set_function(SPI_CSN_PIN, GPIO_FUNC_SPI);
+  gpio_init(BUSY_PIN);
+  gpio_set_dir(BUSY_PIN, GPIO_OUT);
+  hw_busy_enable(true);
 
   // Configure DVI
   dvi0.timing = &DVI_TIMING;
@@ -175,6 +182,7 @@ int __not_in_flash("main") main() {
       .printf = printf,
       .read_bus_blocking = hw_read_bus_blocking,
       .write_bus_blocking = hw_write_bus_blocking,
+      .busy_enable = hw_busy_enable,
   };
   printf("handing over core0 to rust vdc runtime\n");
   run(hw_ctx);
