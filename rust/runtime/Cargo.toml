@@ -13,3 +13,9 @@ ntrix-vdc-sdk = { path = "../sdk" }
 
 [build-dependencies]
 cbindgen = "0.29.4"
+
+[features]
+default = [ ]
+# whether to enable verbose logging,
+# will limit overall performance of runtime
+log_debug = [ ]

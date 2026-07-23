@@ -172,6 +172,7 @@ int __not_in_flash("main") main() {
 
   // start VDC runtime
   struct HardwareCtx hw_ctx = {
+      .printf = printf,
       .read_bus_blocking = hw_read_bus_blocking,
       .write_bus_blocking = hw_write_bus_blocking,
   };
